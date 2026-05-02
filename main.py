@@ -7,34 +7,17 @@ from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import telebot
 from telebot import types, apihelper
-from flask import Flask
 
-# --- نظام البقاء حياً (Keep Alive) لـ Render ---
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot is Running!"
-
-def run_web():
-    # Render يستخدم المنفذ 10000 افتراضياً أو يحدده في البيئة
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
-
-# --- إعدادات البوت ---
+# إعدادات لمنع الـ Timeout في GitHub
 apihelper.CONNECT_TIMEOUT = 120
 apihelper.READ_TIMEOUT = 120
 
 API_TOKEN = '8697260442:AAHU_c1EidIplaIOZvYkevDWqgl7gUXjwdM'
-bot = telebot.TeleBot(API_TOKEN, threaded=True)
+bot = telebot.TeleBot(API_TOKEN)
 
 session = requests.Session()
-session.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    'Referer': 'https://3asq.org/'
-})
+session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
 
-# --- وظيفة البحث ---
 def search_manga(query):
     try:
         url = f"https://3asq.org/?s={query.replace(' ', '+')}&post_type=wp-manga"
@@ -45,7 +28,6 @@ def search_manga(query):
         return {"title": item.find('h3').text.strip(), "url": item.find('a')['href'], "img": item.find('img')['src']}
     except: return None
 
-# --- وظيفة التحميل ---
 def process_download(manga_url, manga_title, chat_id, msg_id, start_ch, end_ch):
     try:
         bot.edit_message_text("🔄 جاري التجهيز السحابي...", chat_id, msg_id)
@@ -64,7 +46,7 @@ def process_download(manga_url, manga_title, chat_id, msg_id, start_ch, end_ch):
 
         zip_name = f"manga_{int(time.time())}.zip"
         with zipfile.ZipFile(zip_name, 'w') as z:
-            with ThreadPoolExecutor(max_workers=15) as ex:
+            with ThreadPoolExecutor(max_workers=10) as ex:
                 def d(u, i):
                     try: return i, session.get(u, timeout=25).content
                     except: return i, None
@@ -73,16 +55,15 @@ def process_download(manga_url, manga_title, chat_id, msg_id, start_ch, end_ch):
                     idx, data = f.result()
                     if data: z.writestr(f"img_{idx}.jpg", data)
 
-        bot.edit_message_text("📤 جاري الرفع لتليجرام...", chat_id, msg_id)
+        bot.edit_message_text("📤 جاري الرفع...", chat_id, msg_id)
         with open(zip_name, 'rb') as f:
             bot.send_document(chat_id, f, caption=f"📦 {manga_title}")
         os.remove(zip_name)
     except Exception as e:
-        bot.send_message(chat_id, f"❌ حدث خطأ: {str(e)}")
+        bot.send_message(chat_id, f"❌ خطأ: {str(e)}")
 
-# --- الأوامر ---
 @bot.message_handler(commands=['start'])
-def st(message): bot.reply_to(message, "🚀 بوت المانجا شغال الآن على Render مجاناً!")
+def st(message): bot.reply_to(message, "🚀 البوت شغال الآن عن طريق GitHub Actions!")
 
 @bot.message_handler(func=lambda m: True)
 def h(message):
@@ -98,16 +79,6 @@ def cl(call):
     msg = bot.send_message(call.message.chat.id, "اكتب رقم الفصل:")
     bot.register_next_step_handler(msg, lambda m: threading.Thread(target=process_download, args=(url, "Manga", m.chat.id, bot.send_message(m.chat.id, "⏳").message_id, int(m.text), int(m.text))).start())
 
-# --- التشغيل ---
 if __name__ == "__main__":
-    # تشغيل خادم الويب الصغير في خيط منفصل
-    threading.Thread(target=run_web, daemon=True).start()
-    
-    # تشغيل البوت
-    while True:
-        try:
-            print("🟢 البوت يحاول الاتصال...")
-            bot.polling(none_stop=True, interval=0, timeout=120)
-        except Exception as e:
-            print(f"⚠️ خطأ: {e}")
-            time.sleep(10)
+    print("🟢 البوت يعمل...")
+    bot.polling(none_stop=True, interval=0, timeout=100)
